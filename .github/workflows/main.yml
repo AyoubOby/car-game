@@ -16,6 +16,9 @@ jobs:
           java-version: 17
       - run: npm install
       - run: npx cap add android
+      - run: mkdir -p assets && cp icon.png assets/icon.png
+      - run: npm install --no-save @capacitor/assets
+      - run: npx capacitor-assets generate --android
       - run: sed -i 's/<activity /<activity android:screenOrientation="portrait" /' android/app/src/main/AndroidManifest.xml
       - run: npx cap sync android
       - run: cd android && chmod +x gradlew && ./gradlew assembleDebug
