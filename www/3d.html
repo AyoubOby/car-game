@@ -43,9 +43,13 @@ h2{margin:0 0 4px;font-size:26px}
 .rb{pointer-events:auto;width:44px;height:44px;border-radius:50%;border:0;background:rgba(0,0,0,.45);color:#fff;font:800 12px system-ui;cursor:pointer}
 #bPause{left:50%;top:10px;margin-left:-22px}
 #bGear{right:12px;top:48px}
-#ctl{position:fixed;left:0;right:0;bottom:0;z-index:6;justify-content:space-between;align-items:flex-end;padding:0 14px calc(18px + env(safe-area-inset-bottom,0px));pointer-events:none}
-#ctl>div{display:flex;gap:12px;pointer-events:none}
-.pad{pointer-events:auto;width:74px;height:74px;border-radius:50%;border:0;background:rgba(0,0,0,.42);color:#fff;font:800 14px system-ui;touch-action:none}
+#ctl{position:fixed;inset:0;z-index:6;pointer-events:none}
+body.rotA,body.rotB{position:fixed;left:0;top:0;width:100vh;height:100vw;transform-origin:0 0}
+body.rotA{transform:translateX(100vw) rotate(90deg)}
+body.rotB{transform:translateY(100vh) rotate(-90deg)}
+#adjust{background:rgba(0,0,0,.4);justify-content:flex-start;pointer-events:none;z-index:25}
+#adjust>*{pointer-events:auto}
+.pad{position:absolute;transform:translate(-50%,-50%);pointer-events:auto;width:calc(74px*var(--ps,1));height:calc(74px*var(--ps,1));border-radius:50%;border:0;background:rgba(0,0,0,.42);color:#fff;font:800 14px system-ui;touch-action:none}
 .pad.down{background:rgba(232,64,43,.85)}
 #count{position:fixed;inset:0;z-index:8;align-items:center;justify-content:center;font:900 120px system-ui;text-shadow:0 4px 16px #000;pointer-events:none}
 #warn{position:fixed;left:0;right:0;bottom:120px;z-index:7;justify-content:center;pointer-events:none}
@@ -63,8 +67,8 @@ input[type=range]{width:min(300px,76vw);accent-color:var(--red)}
   <button class="rb" id="bPause">II</button><button class="rb" id="bGear">SET</button>
 </div>
 <div id="ctl">
-  <div><button class="pad" id="bL">&#9664;</button><button class="pad" id="bR">&#9654;</button></div>
-  <div><button class="pad" id="bBrk">BRAKE</button><button class="pad" id="bGas">GAS</button></div>
+  <button class="pad" id="bL">&#9664;</button><button class="pad" id="bR">&#9654;</button>
+  <button class="pad" id="bBrk">BRAKE</button><button class="pad" id="bGas">GAS</button>
 </div>
 <div id="count"></div><div id="go">GO!</div><div id="warn"><b id="warnT">POLICE</b></div>
 
@@ -109,7 +113,17 @@ input[type=range]{width:min(300px,76vw);accent-color:var(--red)}
   <div class="mrow"><button class="pill" data-a="mprev">PREV</button><button class="pill" id="mPlay" data-a="mplay">PAUSE</button><button class="pill" data-a="mnext">NEXT</button></div>
   <div class="sub" id="nowP">Now playing: Game music</div>
   <div class="mrow"><button class="pill" id="srcP" data-a="srcPhone">PHONE MUSIC</button><button class="pill" id="srcG" data-a="srcGame">GAME MUSIC</button></div>
+  <div><b>Controls</b></div>
+  <div class="mrow"><button class="pill" id="c0" data-a="ctl0">DRAG</button><button class="pill" id="c1" data-a="ctl1">BUTTONS</button></div>
+  <div><b>Screen</b></div>
+  <div class="mrow"><button class="pill" id="s0" data-a="scr0">AUTO</button><button class="pill" id="s1" data-a="scr1">PORTRAIT</button><button class="pill" id="s2" data-a="scr2">LANDSCAPE</button></div>
+  <button class="pill" data-a="adjust">ADJUST BUTTONS</button>
   <button class="btn red" data-a="settingsDone">DONE</button></div>
+
+<div class="ov" id="adjust"><h2 style="margin-top:6px">ADJUST BUTTONS</h2>
+  <div class="sub">Drag a button to move it</div>
+  <div class="mrow"><button class="pill" data-a="adjMinus">&minus;</button><b id="padPct" style="align-self:center;min-width:48px">100%</b><button class="pill" data-a="adjPlus">+</button>
+  <button class="pill" data-a="adjReset">RESET</button><button class="pill act" data-a="adjDone">DONE</button></div></div>
 
 <script>
 /**
@@ -161,6 +175,38 @@ let selC=sel,selM=mp,selD=mode;
 let traffic=[],police=[],parts=[],props=[];
 const keys={l:0,r:0,u:0,d:0},btn={l:0,r:0,u:0,d:0},btnId={};
 let drag=null,nightMap=false;
+let ctl=+LS.get('rr_ctl',0)||0,scr=+LS.get('rr_scr',0)||0,cwid=800,chei=600,padS=+LS.get('rr_padS3d',1)||1,adjDrag=null,padOv={};
+try{padOv=JSON.parse(LS.get('rr_pads3d','{}'))||{};}catch(e){padOv={};}
+function applyRot(){
+  const iw=window.innerWidth||800,ih=window.innerHeight||600,wo=iw>ih;
+  const want=scr===1?false:scr===2?true:wo;
+  const cls=want===wo?'':(want?'rotA':'rotB');
+  document.body.className=cls;
+  cwid=cls?ih:iw;chei=cls?iw:ih;
+}
+function rotMode(){const b=document.body.classList;return b.contains('rotA')?1:b.contains('rotB')?2:0;}
+function toContent(e){
+  const r=rotMode(),iw=window.innerWidth||800,ih=window.innerHeight||600;
+  if(r===1)return{x:e.clientY,y:iw-e.clientX};
+  if(r===2)return{x:ih-e.clientY,y:e.clientX};
+  return{x:e.clientX,y:e.clientY};
+}
+function padDefs(){
+  if(cwid<=chei)return ctl===1?{l:[.15,.9],r:[.37,.9],d:[.63,.9],u:[.85,.9]}:{d:[.14,.9],u:[.86,.9]};
+  return ctl===1?{l:[.07,.84],r:[.16,.84],d:[.84,.84],u:[.93,.84]}:{d:[.07,.84],u:[.93,.84]};
+}
+function padKey(){return (cwid>chei?'L':'P')+ctl;}
+function layoutPads(){
+  const d=padDefs(),o=padOv[padKey()]||{},ids={l:'bL',r:'bR',u:'bGas',d:'bBrk'};
+  for(const k in ids){
+    const el=$(ids[k]);
+    if(!d[k]){el.style.display='none';continue;}
+    const p=o[k]||d[k];
+    el.style.display='';el.style.left=(p[0]*100)+'%';el.style.top=(p[1]*100)+'%';el.style.setProperty('--ps',padS);
+  }
+  const pc=$('padPct');if(pc)pc.textContent=Math.round(padS*100)+'%';
+}
+function saveAdj(){LS.set('rr_pads3d',JSON.stringify(padOv));LS.set('rr_padS3d',padS);}
 
 // ---------- three.js setup ----------
 const canvas=$('gl');
@@ -168,7 +214,7 @@ const renderer=new THREE.WebGLRenderer({canvas,antialias:true});
 renderer.setPixelRatio(Math.min(window.devicePixelRatio||1,2));
 const scene=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(62,1,.1,420);
-function resize(){const w=window.innerWidth||800,h=window.innerHeight||600;renderer.setSize(w,h,false);cam.aspect=w/h;cam.updateProjectionMatrix();}
+function resize(){applyRot();renderer.setSize(cwid,chei,false);cam.aspect=cwid/chei;cam.updateProjectionMatrix();layoutPads();}
 window.addEventListener('resize',resize);resize();
 const amb=new THREE.AmbientLight(0xffffff,.7);scene.add(amb);
 const sun=new THREE.DirectionalLight(0xffffff,.85);sun.position.set(-12,24,10);scene.add(sun);
@@ -542,7 +588,7 @@ function frame(t){
   partsUpdate(dt);
   sfx.eng();sfx.mus();musicTick();
   // camera
-  if(st==='menu'||st==='setup'||(st==='settings'&&back!=='pause')){
+  if(st==='menu'||st==='setup'||(st==='settings'&&back!=='pause')||(st==='adjust'&&back!=='pause')){
     ang+=dt*.5;
     cam.position.set(Math.sin(ang)*6.8,2.3,Math.cos(ang)*6.8);cam.lookAt(0,.7,0);cam.fov=55;cam.updateProjectionMatrix();
     if(playerG){playerG.position.set(0,0,0);playerG.rotation.set(0,0,0);}
@@ -573,7 +619,7 @@ function show(id,on){$(id).classList.toggle('on',!!on);}
 function ui(){
   show('menu',st==='menu');show('setup',st==='setup');show('pause',st==='pause');show('over',st==='over');show('settings',st==='settings');
   show('hud',st==='play'||st==='count'||st==='pause'||st==='crash'||st==='over'||(st==='settings'&&back==='pause'));
-  show('ctl',st==='play'||st==='count');show('count',st==='count');
+  show('ctl',st==='play'||st==='count'||st==='adjust');show('adjust',st==='adjust');layoutPads();show('count',st==='count');
   if(st!=='play')$('warn').classList.remove('on');
   $('menuBest').textContent='Best '+best;
   if(st==='over'){
@@ -605,6 +651,8 @@ function settingsUI(){
   $('mPlay').textContent=mplay?'PAUSE':'PLAY';
   $('nowP').textContent='Now playing: '+(msrc===1&&tracks.length?(mname||'').slice(0,32):'Game music');
   $('srcP').classList.toggle('act',msrc===1);$('srcG').classList.toggle('act',msrc===0);
+  $('c0').classList.toggle('act',ctl===0);$('c1').classList.toggle('act',ctl===1);
+  $('s0').classList.toggle('act',scr===0);$('s1').classList.toggle('act',scr===1);$('s2').classList.toggle('act',scr===2);
 }
 function saveVol(){LS.set('rr_vol',JSON.stringify([vS,vM]));}
 function pauseGame(){if(st==='play'){st='pause';drag=null;for(const k in btn)btn[k]=0;ui();}}
@@ -633,6 +681,13 @@ function act(a){
     case 'mplay':mplay=!mplay;LS.set('rr_mplay',mplay?'1':'0');settingsUI();break;
     case 'srcPhone':if(tracks.length)msrc=1;settingsUI();break;
     case 'srcGame':msrc=0;settingsUI();break;
+    case 'ctl0':case 'ctl1':ctl=a==='ctl0'?0:1;LS.set('rr_ctl',ctl);layoutPads();settingsUI();break;
+    case 'scr0':case 'scr1':case 'scr2':scr=+a[3];LS.set('rr_scr',scr);resize();settingsUI();break;
+    case 'adjust':st='adjust';ui();break;
+    case 'adjDone':saveAdj();st='settings';ui();break;
+    case 'adjMinus':padS=Math.max(.6,+(padS-.1).toFixed(2));layoutPads();saveAdj();break;
+    case 'adjPlus':padS=Math.min(1.6,+(padS+.1).toFixed(2));layoutPads();saveAdj();break;
+    case 'adjReset':delete padOv[padKey()];padS=1;layoutPads();saveAdj();break;
     case 'to2d':{let u=URL2D;try{if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())u='index.html';}catch(e){}location.href=u;break;}
   }
   if(a!=='mnext'&&a!=='mprev')sfx.beep(660);
@@ -645,20 +700,33 @@ $('bGear').addEventListener('pointerdown',e=>{sfx.init();if(st==='play'){pauseGa
 // pedals / steering buttons
 [['bL','l'],['bR','r'],['bGas','u'],['bBrk','d']].forEach(([id,k])=>{
   const el=$(id);
-  el.addEventListener('pointerdown',e=>{sfx.init();btn[k]=1;btnId[k]=e.pointerId;el.classList.add('down');e.preventDefault();});
+  el.addEventListener('pointerdown',e=>{
+    sfx.init();e.preventDefault();
+    if(st==='adjust'){adjDrag=k;return;}
+    btn[k]=1;btnId[k]=e.pointerId;el.classList.add('down');
+  });
 });
-function releaseBtn(e){for(const [id,k] of [['bL','l'],['bR','r'],['bGas','u'],['bBrk','d']]){if(btnId[k]===e.pointerId){btn[k]=0;btnId[k]=-1;$(id).classList.remove('down');}}if(drag&&drag.id===e.pointerId)drag=null;}
+function releaseBtn(e){
+  for(const [id,k] of [['bL','l'],['bR','r'],['bGas','u'],['bBrk','d']]){if(btnId[k]===e.pointerId){btn[k]=0;btnId[k]=-1;$(id).classList.remove('down');}}
+  if(drag&&drag.id===e.pointerId)drag=null;
+  if(adjDrag){adjDrag=null;saveAdj();}
+}
 window.addEventListener('pointerup',releaseBtn);window.addEventListener('pointercancel',releaseBtn);
 // drag steering on the 3D view
 canvas.addEventListener('pointerdown',e=>{
   sfx.init();
   try{const d=document.documentElement;if(d.requestFullscreen&&!document.fullscreenElement)d.requestFullscreen().catch(()=>{});}catch(err){}
-  if(st==='play')drag={id:e.pointerId,x0:e.clientX,px0:px,tx:px};
+  if(st==='play'&&ctl===0)drag={id:e.pointerId,x0:toContent(e).x,px0:px,tx:px};
 });
 window.addEventListener('pointermove',e=>{
+  if(adjDrag&&st==='adjust'){
+    const c2=toContent(e),o=padOv[padKey()]=padOv[padKey()]||{};
+    o[adjDrag]=[Math.max(.05,Math.min(.95,c2.x/cwid)),Math.max(.08,Math.min(.95,c2.y/chei))];
+    layoutPads();return;
+  }
   if(!drag||e.pointerId!==drag.id)return;
-  const mpp=18/Math.min(window.innerWidth||400,700);
-  drag.tx=Math.max(-6.2,Math.min(6.2,drag.px0+(e.clientX-drag.x0)*mpp));
+  const mpp=18/Math.min(cwid,700);
+  drag.tx=Math.max(-6.2,Math.min(6.2,drag.px0+(toContent(e).x-drag.x0)*mpp));
 });
 const KM={ArrowLeft:'l',ArrowRight:'r',ArrowUp:'u',ArrowDown:'d',a:'l',d:'r',w:'u',s:'d'};
 window.addEventListener('keydown',e=>{
